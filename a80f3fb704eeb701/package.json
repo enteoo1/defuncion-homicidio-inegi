@@ -1,0 +1,14 @@
+{
+  "name": "a80f3fb704eeb701",
+  "main": "a80f3fb704eeb701@733.js",
+  "version": "733.0.0",
+  "homepage": "https://observablehq.com/d/a80f3fb704eeb701",
+  "author": {
+    "name": "enteoo1",
+    "url": "https://observablehq.com/@enteoo1"
+  },
+  "type": "module",
+  "peerDependencies": {
+    "@observablehq/runtime": "4 - 5"
+  }
+}
