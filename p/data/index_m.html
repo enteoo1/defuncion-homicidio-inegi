@@ -17,80 +17,149 @@
 -->
 <script>  
  
-    
-const color = d3.scaleQuantize([1, 10], d3.schemeYlOrRd[9]);
-const path = d3.geoPath();
-//console.log(color);
-    
-var x = d3.scaleLinear()
-    .domain([0, width])
-    .range([0, width]);
+    const color = d3.scaleQuantize([1, 10], d3.schemeYlOrRd[9]);
+    const path = d3.geoPath();
+    //console.log(color);
 
-var y = d3.scaleLinear()
-    .domain([0, height])
-    .range([height, 0]);
+    var x = d3.scaleLinear()
+        .domain([0, width])
+        .range([0, width]);
 
-var width = 960,
-    height = 500;
+    var y = d3.scaleLinear()
+        .domain([0, height])
+        .range([height, 0]);
 
-var projection = d3.geoMercator()
-    .scale(1200)
-    .center([-102.34034978813841, 24.012062015793]);
+    var width = 960,
+        height = 500;
 
-var svg = d3.select("body").append("svg")
-    .style("border", "1px solid red")
-    .attr("width", width)
-    .attr("height", height);  
-    
-var g = svg.append("g");
+    var projection = d3.geoMercator()
+        .scale(1200)
+        .center([-102.34034978813841, 24.012062015793]);
 
-const json_data = d3.json("mx_tj_pretty.json");
-const deaths_data = d3.csv("clean.csv");
-    
-console.log(json_data);
-console.log(deaths_data);
-    
-function ready(error, json_data, deaths_data) {
-    if(error) {
-        console.error("Error loading data:", error);
-        return;
+    var svg = d3.select("body").append("svg")
+        .style("border", "1px solid red")
+        .attr("width", width)
+        .attr("height", height);  
+
+    var g = svg.append("g");
+
+    function reduce_data(deaths_data){
+        return new Promise((resolve, reject) => {
+            console.log(deaths_data);
+            var results = {states: new Map(), DeathsByYear: new Map()};
+
+            for (var index in deaths_data) {
+                //console.log(currentValue);
+                var currentValue = deaths_data[index];
+                if(!(currentValue)) {
+                    console.log(index);
+                }
+                if(!(currentValue.StateId)) {
+                    continue;
+                }
+                var state = results.states.get(currentValue.StateId);
+
+                if(!(state)){
+                    state = {};
+                    state.StateId = currentValue.StateId;
+                    state.Name = currentValue.State;
+                    state.DeathsByYear = new Map();
+                }
+
+                var theYear = String(currentValue.Year);
+                var deathsByYearMap = state.DeathsByYear.get(theYear);
+
+                if(!(deathsByYearMap)){
+                    deathsByYearMap = {};
+                    deathsByYearMap.Year = parseInt(currentValue.Year);
+                    deathsByYearMap.Total = 0;
+                    deathsByYearMap.Ratio = 0;
+                }
+
+                deathsByYearMap.Total += parseInt(currentValue.Total);
+
+                state.DeathsByYear.set(theYear, deathsByYearMap);
+                results.states.set(currentValue.StateId, state);
+
+                //
+                var totalDeathsByYearMap = results.DeathsByYear.get(theYear);
+
+                if(!(totalDeathsByYearMap)){
+                    totalDeathsByYearMap = {};
+                    totalDeathsByYearMap.Year = parseInt(currentValue.Year);
+                    totalDeathsByYearMap.Total = 0;
+                }
+                totalDeathsByYearMap.Total += parseInt(currentValue.Total);
+                results.DeathsByYear.set(theYear, totalDeathsByYearMap);
+            }
+
+            console.log(results);
+
+            for (const [stateId, state] of results.states) {
+                console.log(`${stateId} = ${state}`);
+                for (const [yearKey, item] of state.DeathsByYear) {
+                    item.Ratio = item.Total / results.DeathsByYear.get(yearKey).Total;
+                }
+            }
+            console.log(results);
+             
+            resolve(results);
+        });
     }
-}
+    
+    function drawMap(map_data, reduced_deaths_data) {
+        var municipalities_geometries = topojson.feature(map_data, map_data.objects.municipalities);
+        console.log(municipalities_geometries);
 
-    //# load JSON data
-d3.json("mx_tj_pretty.json")
-  .then(function(data) {
-    // Use the loaded data here
-    console.log(data);
+        var states_geometries = topojson.feature(map_data, map_data.objects.states);
+        console.log(states_geometries);
     
-    var municipalities_geometries = topojson.feature(data, data.objects.municipalities);
-    console.log(municipalities_geometries);
+        svg.selectAll("path")
+        .data(municipalities_geometries.features)
+        .join("path")
+        .attr("d", path.projection(projection))
+        .attr("fill", "transparent")
+        .style("stroke", "#333")
+        .style("stroke-width", ".2px")
+        .attr("class", "muns");   
+
+        g.selectAll("path")
+        .data(states_geometries.features)
+        .join("path")
+        .attr("d", path.projection(projection))
+        .attr("fill", "transparent")
+        .style("stroke", "#333");       
+    }
     
-    var states_geometries = topojson.feature(data, data.objects.states);
-    console.log(states_geometries);
-    
-   svg.selectAll("path")
-    .data(municipalities_geometries.features)
-    .join("path")
-    .attr("d", path.projection(projection))
-    .attr("fill", "transparent")
-    .style("stroke", "#333")
-    .style("stroke-width", ".2px")
-    .attr("class", "muns");   
-    
-    g.selectAll("path")
-    .data(states_geometries.features)
-    .join("path")
-    .attr("d", path.projection(projection))
-    .attr("fill", "transparent")
-    .style("stroke", "#333");
+    //# load JSON and CSV data
+    Promise.all([
+        d3.csv('clean.csv'),
+        d3.json('mx_tj_pretty.json')
+    ]).then(function([deaths_data, map_data]){
+      // manipulate data here
+        console.log(deaths_data);
+        console.log(map_data);
+
+        //var reduced_deaths_data = 
+        reduce_data(deaths_data)
+            .then((reduced_deaths_data)=> {
+                console.log(reduced_deaths_data);
+            });
+        
+        
+        
+        
+        //reduced_deaths_data = calculate_ratio(reduced_deaths_data);
+        //drawMap(map_data, reduced_deaths_data);
+    })
+    .catch(function(error) {
+        // Handle any errors that may occur during data loading
+        console.error("Error loading data:", error);
+    });       
 
     
-  })
-  .catch(function(error) {
-    // Handle any errors that may occur during data loading
-    console.error("Error loading data:", error);
-  });
+    
+
     
 
 
