@@ -137,20 +137,22 @@
         d3.json('mx_tj_pretty.json')
     ]).then(function([deaths_data, map_data]){
       // manipulate data here
-        console.log(deaths_data);
-        console.log(map_data);
+        //console.log(deaths_data);
+        //console.log(map_data);
 
         //var reduced_deaths_data = 
         reduce_data(deaths_data)
             .then((reduced_deaths_data)=> {
                 console.log(reduced_deaths_data);
+				
+				drawMap(map_data, reduced_deaths_data);
             });
         
         
         
         
         //reduced_deaths_data = calculate_ratio(reduced_deaths_data);
-        //drawMap(map_data, reduced_deaths_data);
+        //
     })
     .catch(function(error) {
         // Handle any errors that may occur during data loading
