@@ -17,7 +17,7 @@
 -->
 <script>  
  
-    const color = d3.scaleQuantize([1, 10], d3.schemeYlOrRd[9]);
+    
     const path = d3.geoPath();
     //console.log(color);
 
@@ -43,35 +43,37 @@
 
     var g = svg.append("g");
 
+    var reducedData = null;
+    
     function reduce_data(deaths_data){
         return new Promise((resolve, reject) => {
-            console.log(deaths_data);
+            //console.log(deaths_data);
             var results = {states: new Map(), DeathsByYear: new Map()};
 
             for (var index in deaths_data) {
                 //console.log(currentValue);
                 var currentValue = deaths_data[index];
                 if(!(currentValue)) {
-                    console.log(index);
+                    //console.log(index);
                 }
-                if(!(currentValue.StateId)) {
+                if(!(currentValue.IdEstado)) {
                     continue;
                 }
-                var state = results.states.get(currentValue.StateId);
+                var state = results.states.get(currentValue.IdEstado);
 
                 if(!(state)){
                     state = {};
-                    state.StateId = currentValue.StateId;
-                    state.Name = currentValue.State;
+                    state.IdEstado = currentValue.IdEstado;
+                    state.Name = currentValue.Estado;
                     state.DeathsByYear = new Map();
                 }
 
-                var theYear = String(currentValue.Year);
+                var theYear = String(currentValue.Año);
                 var deathsByYearMap = state.DeathsByYear.get(theYear);
 
                 if(!(deathsByYearMap)){
                     deathsByYearMap = {};
-                    deathsByYearMap.Year = parseInt(currentValue.Year);
+                    deathsByYearMap.Año = parseInt(currentValue.Año);
                     deathsByYearMap.Total = 0;
                     deathsByYearMap.Ratio = 0;
                 }
@@ -79,32 +81,61 @@
                 deathsByYearMap.Total += parseInt(currentValue.Total);
 
                 state.DeathsByYear.set(theYear, deathsByYearMap);
-                results.states.set(currentValue.StateId, state);
+                results.states.set(currentValue.IdEstado, state);
 
                 //
                 var totalDeathsByYearMap = results.DeathsByYear.get(theYear);
 
                 if(!(totalDeathsByYearMap)){
                     totalDeathsByYearMap = {};
-                    totalDeathsByYearMap.Year = parseInt(currentValue.Year);
+                    totalDeathsByYearMap.Año = parseInt(currentValue.Año);
                     totalDeathsByYearMap.Total = 0;
                 }
                 totalDeathsByYearMap.Total += parseInt(currentValue.Total);
                 results.DeathsByYear.set(theYear, totalDeathsByYearMap);
             }
 
-            console.log(results);
+            //console.log(results);
 
-            for (const [stateId, state] of results.states) {
-                console.log(`${stateId} = ${state}`);
+            for (const [IdEstado, state] of results.states) {
+                //console.log(`${IdEstado} = ${state}`);
+                
                 for (const [yearKey, item] of state.DeathsByYear) {
                     item.Ratio = item.Total / results.DeathsByYear.get(yearKey).Total;
                 }
             }
-            console.log(results);
+            //console.log(results);
              
             resolve(results);
         });
+    }
+    
+    function filter_data_by_year(reduced_deaths_data, filter_year) {
+        var results = {year: filter_year, states: new Map()};
+        var ratioAccum = 0;
+        for (const [IdEstado, Estado] of reduced_deaths_data.states) {
+            //console.log(`${IdEstado} = ${Estado}`);
+            
+            state = {};
+            state.IdEstado = parseInt(Estado.IdEstado);
+            state.Name = Estado.Name;
+            state.Deaths = 0;
+            state.Ratio = 0;
+            
+            for (const [yearKey, item] of Estado.DeathsByYear) {
+                if(filter_year == yearKey) {
+                    state.Deaths = item.Total;
+                    //state.Ratio = Math.trunc(item.Ratio * 100);
+                    state.Ratio = (item.Ratio * 100);
+                    ratioAccum += state.Ratio
+                }
+            }
+
+            results.states.set(parseInt(Estado.IdEstado), state);            
+        } 
+        //console.log(ratioAccum);
+        //console.log(results);
+        return results;
     }
     
     function drawMap(map_data, reduced_deaths_data) {
@@ -114,6 +145,28 @@
         var states_geometries = topojson.feature(map_data, map_data.objects.states);
         console.log(states_geometries);
     
+        var array  = [];
+        var valueMap = new Map();
+        for (const [id, state] of reduced_deaths_data.states) {
+            valueMap.set(id, state.Ratio);
+            array.push(state.Ratio);
+        }
+        
+        console.log(valueMap);
+        console.log(array);
+        var maxRatio = Math.max(...array);
+        console.log(maxRatio);
+        
+        var color = d3.scaleQuantize([0, maxRatio], d3.schemeYlOrRd[9]);
+        
+        var r = valueMap.get(9);
+        console.log(r);
+        console.log(color( r ));
+        console.log(color( 23 ));
+        //g.attr("transform", "translate(610,20)")
+        //    .append(() => Legend(color, {title: "Defunciones por Homicidio 1990 - 2022", width: 260}));
+
+        /*
         svg.selectAll("path")
         .data(municipalities_geometries.features)
         .join("path")
@@ -122,12 +175,14 @@
         .style("stroke", "#333")
         .style("stroke-width", ".2px")
         .attr("class", "muns");   
+        */
 
         g.selectAll("path")
         .data(states_geometries.features)
         .join("path")
         .attr("d", path.projection(projection))
-        .attr("fill", "transparent")
+        //.attr("fill", "transparent")
+        .attr("fill", d => color(valueMap.get(d.properties.state_code)))
         .style("stroke", "#333");       
     }
     
@@ -145,14 +200,14 @@
             .then((reduced_deaths_data)=> {
                 console.log(reduced_deaths_data);
 				
-				drawMap(map_data, reduced_deaths_data);
+                reducedData = reduced_deaths_data;
+            
+                filtered_data = filter_data_by_year(reduced_deaths_data, "1990");
+            
+				drawMap(map_data, filtered_data);
             });
         
-        
-        
-        
-        //reduced_deaths_data = calculate_ratio(reduced_deaths_data);
-        //
+
     })
     .catch(function(error) {
         // Handle any errors that may occur during data loading
