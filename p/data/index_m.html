@@ -3,10 +3,43 @@
 <title>México - Muertes por defunción - 2022</title>
 
 
+<style>
 
+.bar {
+  fill: steelblue;
+}
+
+.bar:hover {
+  fill: brown;
+}
+
+.title {
+  font: bold 14px "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+.subtitle {
+  font: bold 10px "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+.axis {
+  font: 10px sans-serif;
+}
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+.x.axis path {
+  display: none;
+}
+
+</style>
 <body>
 <script src="./scripts/d3.v7.min.js"></script> 
 <script src="https://unpkg.com/topojson@3"></script>
+<script src="https://unpkg.com/d3-simple-slider"></script>
 
 <!--d3.v7.min.js
 
@@ -17,10 +50,21 @@
 -->
 <script>  
  
-    
-    const path = d3.geoPath();
-    //console.log(color);
+ var margin = {top: 5, right: 5, bottom: 5, left: 5},
+     width = 960 - margin.left - margin.right,
+     height = 500 - margin.top - margin.bottom;
 
+/*    
+var x = d3.scale.ordinal()
+    .rangeRoundBands([0, width], .1, .3);
+
+var y = d3.scale.linear()
+    .range([height, 0]);   
+    
+    //console.log(color);
+*/
+    const path = d3.geoPath();
+    
     var x = d3.scaleLinear()
         .domain([0, width])
         .range([0, width]);
@@ -28,9 +72,6 @@
     var y = d3.scaleLinear()
         .domain([0, height])
         .range([height, 0]);
-
-    var width = 960,
-        height = 500;
 
     var projection = d3.geoMercator()
         .scale(1200)
@@ -41,9 +82,13 @@
         .attr("width", width)
         .attr("height", height);  
 
-    var g = svg.append("g");
+    var g = svg.append("g").attr("id", "stateMap");
+    var g1 = svg.append("g").attr("id", "municipalitiesMap");
 
     var reducedData = null;
+    var firstTime = true;
+    var slider = null;
+    var sliderValue = null;
     
     function reduce_data(deaths_data){
         return new Promise((resolve, reject) => {
@@ -138,12 +183,9 @@
         return results;
     }
     
-    function drawMap(map_data, reduced_deaths_data) {
+    function drawMap(map_data, reduced_deaths_data, yearToFilter) {
         var municipalities_geometries = topojson.feature(map_data, map_data.objects.municipalities);
-        console.log(municipalities_geometries);
-
         var states_geometries = topojson.feature(map_data, map_data.objects.states);
-        console.log(states_geometries);
     
         var array  = [];
         var valueMap = new Map();
@@ -152,38 +194,92 @@
             array.push(state.Ratio);
         }
         
-        console.log(valueMap);
-        console.log(array);
         var maxRatio = Math.max(...array);
-        console.log(maxRatio);
-        
         var color = d3.scaleQuantize([0, maxRatio], d3.schemeYlOrRd[9]);
+        var times = d3.utcYears(Date.UTC(1990, 0, 1), Date.UTC(2023, 0, 1))
         
-        var r = valueMap.get(9);
-        console.log(r);
-        console.log(color( r ));
-        console.log(color( 23 ));
-        //g.attr("transform", "translate(610,20)")
-        //    .append(() => Legend(color, {title: "Defunciones por Homicidio 1990 - 2022", width: 260}));
+        if(firstTime){
+            svg.append("text")
+            .attr("class", "title")
+            .attr("x", 20)
+            .attr("y", 26)
+            .text("México - Defunciones por Homicidio 1990 - 2022");
+            
+             svg.append("text")
+            .attr("id", "yearText")
+            .attr("class", "title")
+            .attr("x", 20)
+            .attr("y", 46)
+            .text("Año: " + yearToFilter);            
+        }
 
-        /*
-        svg.selectAll("path")
+        d3.select("#yearText")
+            .text("Año: " + yearToFilter); 
+        
+        g1.selectAll("path")
         .data(municipalities_geometries.features)
         .join("path")
         .attr("d", path.projection(projection))
         .attr("fill", "transparent")
         .style("stroke", "#333")
         .style("stroke-width", ".2px")
-        .attr("class", "muns");   
-        */
-
+        .attr("class", "muns")
+        .attr('transform', () => d3.zoomIdentity 
+        .translate(0, 0 ).scale(.92) );
+        
         g.selectAll("path")
         .data(states_geometries.features)
         .join("path")
         .attr("d", path.projection(projection))
-        //.attr("fill", "transparent")
         .attr("fill", d => color(valueMap.get(d.properties.state_code)))
-        .style("stroke", "#333");       
+        .style("stroke", "#333")
+        .attr('transform', () => d3.zoomIdentity 
+                .translate(0, 0 ).scale(.92) );
+        
+        if(firstTime) {
+            //console.log(Date.UTC(parseInt(yearToFilter), 0, 1));
+              slider = d3.sliderBottom()
+              .min(d3.min(times))
+              .max(d3.max(times))
+              .marks(times)
+              .width(width-100)
+              .tickFormat(d3.utcFormat("%Y"))
+              .tickValues(times)
+              //.silentValue(()=> Date.UTC(parseInt(yearToFilter), 0, 1))
+              //.displayValue(()=> yearToFilter)
+              .on('onchange', (val) => {
+                    sliderValue = val;
+                    
+                    var fullYearToFilter = "" + (parseInt(val.getFullYear()) + 1);
+                    console.log("yearToFilter: " + yearToFilter);
+                    console.log("fullYearToFilter:" + fullYearToFilter);
+                    //if(yearToFilter != fullYearToFilter) {
+                        filtered_data = filter_data_by_year(reducedData, fullYearToFilter);
+                        drawMap(map_data, filtered_data, fullYearToFilter);                      
+                    //}
+
+              });
+
+            var gSlider = svg.append("g")
+            .style("border", "1px solid red")
+            .attr('transform', () => d3.zoomIdentity 
+                   .translate(30, height - 40 ).scale(1))
+            .attr("x", 20)
+            .attr("y", 900)        
+            .call(slider);  
+
+        }
+        
+        if(sliderValue) {
+            slider.value(sliderValue);
+        }
+
+        
+        if(firstTime){
+            console.log("Setting firstTime to false");
+            firstTime = false;
+        }
+        
     }
     
     //# load JSON and CSV data
@@ -202,9 +298,11 @@
 				
                 reducedData = reduced_deaths_data;
             
-                filtered_data = filter_data_by_year(reduced_deaths_data, "1990");
+                var yearToFilter = "1990";
             
-				drawMap(map_data, filtered_data);
+                filtered_data = filter_data_by_year(reduced_deaths_data, yearToFilter);
+            
+				drawMap(map_data, filtered_data, yearToFilter);
             });
         
 
@@ -214,60 +312,7 @@
         console.error("Error loading data:", error);
     });       
 
-    
-    
-
-    
-
-
-    
-/*
- const color = d3.scaleQuantize([1, 10], d3.schemeBlues[9]);
-  const path = d3.geoPath();
-  const format = d => `${d}%`;
-  const valuemap = new Map(data.map(d => [d.id, d.rate]));
-
-  // The counties feature collection is all U.S. counties, each with a
-  // five-digit FIPS identifier. The statemap lets us lookup the name of 
-  // the state that contains a given county; a state’s two-digit identifier
-  // corresponds to the first two digits of its counties’ identifiers.
-  const counties = topojson.feature(us, us.objects.counties);
-  const states = topojson.feature(us, us.objects.states);
-  const statemap = new Map(states.features.map(d => [d.id, d]));
-
-  // The statemesh is just the internal borders between states, i.e.,
-  // everything but the coastlines and country borders. This avoids an
-  // additional stroke on the perimeter of the map, which would otherwise
-  // mask intricate features such as islands and inlets. (Try removing
-  // the last argument to topojson.mesh below to see the effect.)
-  const statemesh = topojson.mesh(us, us.objects.states, (a, b) => a !== b);
-
-  const svg = d3.create("svg")
-      .attr("width", 975)
-      .attr("height", 610)
-      .attr("viewBox", [0, 0, 975, 610])
-      .attr("style", "max-width: 100%; height: auto;");
-
-  svg.append("g")
-      .attr("transform", "translate(610,20)")
-      .append(() => Legend(color, {title: "Unemployment rate (%)", width: 260}));
-
-  svg.append("g")
-    .selectAll("path")
-    .data(topojson.feature(us, us.objects.counties).features)
-    .join("path")
-      .attr("fill", d => color(valuemap.get(d.id)))
-      .attr("d", path)
-    .append("title")
-      .text(d => `${d.properties.name}, ${statemap.get(d.id.slice(0, 2)).properties.name}\n${valuemap.get(d.id)}%`);
-
-  svg.append("path")
-      .datum(topojson.mesh(us, us.objects.states, (a, b) => a !== b))
-      .attr("fill", "none")
-      .attr("stroke", "white")
-      .attr("stroke-linejoin", "round")
-      .attr("d", path);
- */   
+ 
     
     
 </script>
